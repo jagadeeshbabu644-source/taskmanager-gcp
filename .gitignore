@@ -1,0 +1,30 @@
+# Java build output - never commit compiled files
+target/
+*.class
+*.jar
+*.war
+# Terraform sensitive files - NEVER commit these
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terragrunt-cache/
+terraform.tfvars
+*.tfvars
+!example.tfvars
+# Service account keys - NEVER commit
+*.json
+service-account*.json
+*-key.json
+# Secrets
+*.pem
+*.key
+.env
+.env.*
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+# OS files
+.DS_Store
+Thumbs.db
