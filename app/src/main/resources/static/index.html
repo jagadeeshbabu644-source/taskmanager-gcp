@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f0f4f8; color: #222; }
+    #header {
+      background: #1565c0; color: white;
+      padding: 16px 28px;
+      display: flex; justify-content: space-between; align-items: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    #app-title { font-size: 22px; font-weight: bold; }
+    #stats-bar { display: flex; gap: 16px; }
+    #stats-bar span {
+      background: rgba(255,255,255,0.2);
+      padding: 5px 14px; border-radius: 20px; font-size: 13px;
+    }
+    #main-content { max-width: 860px; margin: 28px auto; padding: 0 16px; }
+    #task-form-section {
+      background: white; padding: 22px; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 22px;
+    }
+    #task-form-section h2 { margin-bottom: 14px; color: #1565c0; font-size: 17px; }
+    #task-form { display: flex; flex-direction: column; gap: 10px; }
+    #task-title {
+      padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 6px;
+      font-size: 14px; outline: none;
+    }
+    #task-title:focus { border-color: #1565c0; }
+    #task-desc {
+      padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 6px;
+      font-size: 14px; resize: vertical; outline: none; min-height: 60px;
+    }
+    #task-priority {
+      padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 6px;
+      font-size: 14px; background: white; cursor: pointer;
+    }
+    #submit-btn {
+      background: #1565c0; color: white; padding: 12px;
+      border: none; border-radius: 6px; cursor: pointer;
+      font-size: 15px; font-weight: bold;
+    }
+    #submit-btn:hover { background: #0d47a1; }
+    #task-list-section {
+      background: white; padding: 22px; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    #task-list-section h2 { margin-bottom: 14px; color: #1565c0; font-size: 17px; }
+    #filter-bar { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+    .filter-btn {
+      padding: 7px 18px; border: 2px solid #1565c0;
+      border-radius: 22px; background: white;
+      color: #1565c0; cursor: pointer; font-size: 13px; font-weight: bold;
+    }
+    .filter-btn:hover  { background: #e3f2fd; }
+    .filter-btn.active { background: #1565c0; color: white; }
+    #task-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    #empty-msg { text-align: center; padding: 40px; color: #aaa; font-size: 15px; }
+    .task-item {
+      padding: 16px; border-radius: 8px;
+      border-left: 6px solid #ccc;
+      background: #fafafa;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .task-item.priority-high   { border-left-color: #e53935; }
+    .task-item.priority-medium { border-left-color: #fb8c00; }
+    .task-item.priority-low    { border-left-color: #43a047; }
+    .task-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 4px;
+    }
+    .task-title-text { font-size: 15px; font-weight: bold; color: #222; }
+    .badge {
+      font-size: 11px; padding: 3px 12px;
+      border-radius: 12px; font-weight: bold; text-transform: capitalize;
+    }
+    .badge-pending     { background: #fff3e0; color: #e65100; }
+    .badge-in_progress { background: #e3f2fd; color: #1565c0; }
+    .badge-completed   { background: #e8f5e9; color: #2e7d32; }
+    .priority-label { font-size: 11px; color: #999; margin-bottom: 6px; }
+    .task-desc-text { font-size: 13px; color: #666; margin-bottom: 10px; }
+    .task-actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    .status-select {
+      padding: 5px 10px; border: 1px solid #ddd;
+      border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    .delete-btn {
+      padding: 5px 14px; background: #e53935; color: white;
+      border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    .delete-btn:hover { background: #b71c1c; }
+    #footer {
+      text-align: center; padding: 20px;
+      color: #999; font-size: 12px; margin-top: 10px;
+    }
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #323232; color: white;
+      padding: 12px 20px; border-radius: 6px;
+      font-size: 14px; display: none; z-index: 999;
+    }
+    .toast.show { display: block; }
+  </style>
+</head>
+<body>
+<header id="header">
+  <span id="app-title">Task Manager</span>
+  <div id="stats-bar">
+    <span id="total-tasks">Total: 0</span>
+    <span id="pending-tasks">Pending: 0</span>
+    <span id="completed-tasks">Done: 0</span>
+  </div>
+</header>
+<main id="main-content">
+  <section id="task-form-section">
+    <h2>Add New Task</h2>
+    <div id="task-form">
+      <input id="task-title" type="text" placeholder="Task title (required)" />
+      <textarea id="task-desc" placeholder="Description (optional)"></textarea>
+      <select id="task-priority">
+        <option value="low">Low Priority</option>
+        <option value="medium" selected>Medium Priority</option>
+        <option value="high">High Priority</option>
+      </select>
+      <button id="submit-btn" type="button">Add Task</button>
+    </div>
+  </section>
+  <section id="task-list-section">
+    <h2>Tasks</h2>
+    <div id="filter-bar">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="pending">Pending</button>
+      <button class="filter-btn" data-filter="in_progress">In Progress</button>
+      <button class="filter-btn" data-filter="completed">Completed</button>
+    </div>
+    <ul id="task-list">
+      <li id="empty-msg">No tasks yet. Add your first task above!</li>
+    </ul>
+  </section>
+</main>
+<footer id="footer">
+  Task Manager v1.0 | Spring Boot | Running on port 8080
+</footer>
+<div class="toast" id="toast"></div>
+<script>
+  var currentFilter = 'all';
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2500);
+  }
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+  // Load Stats 
+  function loadStats() {
+    fetch('/api/stats')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        document.getElementById('total-tasks').textContent     = 'Total: '   + d.total;
+        document.getElementById('pending-tasks').textContent   = 'Pending: ' + d.pending;
+        document.getElementById('completed-tasks').textContent = 'Done: '    + d.completed;
+      })
+      .catch(function(e) { console.error('Stats error', e); });
+  }
+  // Load Tasks 
+  function loadTasks(status) {
+    var url = '/api/tasks';
+    if (status && status !== 'all') { url = '/api/tasks?status=' + status; }
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var ul = document.getElementById('task-list');
+        ul.innerHTML = '';
+        if (!d.tasks || d.tasks.length === 0) {
+          var li = document.createElement('li');
+          li.id = 'empty-msg';
+          li.textContent = 'No tasks here. Add one above!';
+          ul.appendChild(li);
+          return;
+        }
+        d.tasks.forEach(function(task) {
+          var li = document.createElement('li');
+          li.className = 'task-item priority-' + task.priority;
+          li.setAttribute('data-id', task.id);
+          var priorityText = task.priority.charAt(0).toUpperCase() + task.priority.slice(1) + ' Priority';
+          var statusDisplay = task.status.replace('_', ' ');
+          var header = document.createElement('div');
+          header.className = 'task-header';
+          var titleSpan = document.createElement('span');
+          titleSpan.className = 'task-title-text';
+          titleSpan.textContent = task.title;
+          var badge = document.createElement('span');
+          badge.className = 'badge badge-' + task.status;
+          badge.textContent = statusDisplay;
+          header.appendChild(titleSpan);
+          header.appendChild(badge);
+          var priorityDiv = document.createElement('div');
+          priorityDiv.className = 'priority-label';
+          priorityDiv.textContent = priorityText;
+          var actions = document.createElement('div');
+          actions.className = 'task-actions';
+          var select = document.createElement('select');
+          select.className = 'status-select';
+          select.setAttribute('data-id', task.id);
+          [['pending','Pending'],['in_progress','In Progress'],['completed','Completed']].forEach(function(opt) {
+            var o = document.createElement('option');
+            o.value = opt[0];
+            o.textContent = opt[1];
+            if (task.status === opt[0]) o.selected = true;
+            select.appendChild(o);
+          });
+          var delBtn = document.createElement('button');
+          delBtn.className = 'delete-btn';
+          delBtn.textContent = 'Delete';
+          delBtn.setAttribute('data-id', task.id);
+          actions.appendChild(select);
+          actions.appendChild(delBtn);
+          li.appendChild(header);
+          li.appendChild(priorityDiv);
+          if (task.description) {
+            var descDiv = document.createElement('div');
+            descDiv.className = 'task-desc-text';
+            descDiv.textContent = task.description;
+            li.appendChild(descDiv);
+          }
+          li.appendChild(actions);
+          ul.appendChild(li);
+        });
+      })
+      .catch(function(e) { console.error('Load tasks error', e); });
+  }
+  // Create Task 
+  function createTask() {
+    var title = document.getElementById('task-title').value.trim();
+    if (!title) {
+      showToast('Please enter a task title!');
+      document.getElementById('task-title').focus();
+      return;
+    }
+    var payload = {
+      title:       title,
+      description: document.getElementById('task-desc').value.trim(),
+      priority:    document.getElementById('task-priority').value
+    };
+    fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(r) {
+      if (r.ok) {
+        document.getElementById('task-title').value = '';
+        document.getElementById('task-desc').value  = '';
+        document.getElementById('task-priority').value = 'medium';
+        loadTasks(currentFilter);
+        loadStats();
+        showToast('Task added!');
+      } else {
+        showToast('Error adding task');
+      }
+    })
+    .catch(function(e) { showToast('Error: ' + e); });
+  }
+  // Update Status 
+  function updateStatus(id, status) {
+    fetch('/api/tasks/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: status })
+    })
+    .then(function(r) {
+      if (r.ok) { loadTasks(currentFilter); loadStats(); }
+    })
+    .catch(function(e) { console.error('Update error', e); });
+  }
+  // Delete Task 
+  function deleteTask(id) {
+    if (!confirm('Delete this task?')) return;
+    fetch('/api/tasks/' + id, { method: 'DELETE' })
+      .then(function(r) {
+        if (r.ok) { loadTasks(currentFilter); loadStats(); showToast('Task deleted'); }
+      })
+      .catch(function(e) { console.error('Delete error', e); });
+  }
+  // Event Listeners (attached once DOM is ready) 
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add Task button
+    document.getElementById('submit-btn').addEventListener('click', function() {
+      createTask();
+    });
+    // Also submit on Enter key in title field
+    document.getElementById('task-title').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { createTask(); }
+    });
+    // Filter buttons
+    document.getElementById('filter-bar').addEventListener('click', function(e) {
+      var btn = e.target.closest('.filter-btn');
+      if (!btn) return;
+      document.querySelectorAll('.filter-btn').forEach(function(b) {
+        b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      currentFilter = btn.getAttribute('data-filter');
+      loadTasks(currentFilter);
+    });
+    // Status dropdown + Delete button (event delegation on task list)
+    document.getElementById('task-list').addEventListener('change', function(e) {
+      if (e.target.classList.contains('status-select')) {
+        var id = e.target.getAttribute('data-id');
+        updateStatus(id, e.target.value);
+      }
+    });
+    document.getElementById('task-list').addEventListener('click', function(e) {
+      var btn = e.target.closest('.delete-btn');
+      if (btn) {
+        var id = btn.getAttribute('data-id');
+        deleteTask(id);
+      }
+    });
+    // Initial load
+    loadTasks('all');
+    loadStats();
+    setInterval(loadStats, 15000);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# Cloud Build: Pull Request Validation
+# Triggered by: Pull Request opened against main
+# Purpose: verify code compiles and image builds
+# Does NOT push image or deploy to GKE
+substitutions:
+  _REGION:     us-central1
+  _AR_REPO:    taskmanager
+  _IMAGE_NAME: taskmanager
+steps:
+  # Step 1: Build JAR (runs tests this time)
+  - name: 'maven:3.9-eclipse-temurin-17'
+    id: 'build-and-test'
+    entrypoint: 'mvn'
+    args:
+      - 'clean'
+      - 'package'
+      - '-f'
+      - 'app/pom.xml'
+    env:
+      - 'MAVEN_OPTS=-Xmx512m'
+  # Step 2: Build Docker image (verify only)
+  # No push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image-verify'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:pr-$SHORT_SHA'
+      - './app'
+    waitFor: ['build-and-test']
+  # Step 3: Print result
+  - name: 'ubuntu'
+    id: 'pr-check-result'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "================================"
+        echo "  PR Validation PASSED"
+        echo "  Commit: $COMMIT_SHA"
+        echo "  Branch: $BRANCH_NAME"
+        echo "  Safe to merge to main"
+        echo "================================"
+    waitFor: ['build-image-verify']
+timeout: '600s'
+options:
+  logging:     CLOUD_LOGGING_ONLY
+  machineType: E2_MEDIUM
