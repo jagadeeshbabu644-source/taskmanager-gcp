@@ -46,11 +46,9 @@ steps:
       - '-f'
       - 'k8s/service.yaml'
       - '-f'
-      - 'k8s/servicemonitor.yaml'
-      - '-f'
       - 'k8s/hpa.yaml'
       - '-f'
-      - 'k8s/grafana-ingress.yaml'
+      - 'k8s/ingress.yaml'
     env:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
