@@ -5,14 +5,12 @@ substitutions:
   _NAMESPACE: taskmanager
   _AR_REPO: taskmanager
   _IMAGE_NAME: taskmanager
-
 steps:
   - name: 'maven:3.9-eclipse-temurin-17'
     id: 'build-jar'
     entrypoint: 'mvn'
     args: ['clean','package','-DskipTests','-f','app/pom.xml']
     env: ['MAVEN_OPTS=-Xmx512m']
-
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
@@ -23,7 +21,6 @@ steps:
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest'
       - './app'
     waitFor: ['build-jar']
-
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args:
@@ -31,8 +28,6 @@ steps:
       - '--all-tags'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}'
     waitFor: ['build-image']
-
-  # Apply namespace FIRST
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'apply-namespace'
     args: ['apply','-f','k8s/namespace.yaml']
@@ -40,23 +35,24 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['push-image']
-
-  # Apply core manifests AFTER namespace
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'apply-manifests'
     args:
       - 'apply'
-      - '-f','k8s/configmap.yaml'
-      - '-f','k8s/deployment.yaml'
-      - '-f','k8s/service.yaml'
-      - '-f','k8s/hpa.yaml'
-      - '-f','k8s/grafana-ingress.yaml'
+      - '-f'
+      - 'k8s/configmap.yaml'
+      - '-f'
+      - 'k8s/deployment.yaml'
+      - '-f'
+      - 'k8s/service.yaml'
+      - '-f'
+      - 'k8s/hpa.yaml'
+      - '-f'
+      - 'k8s/grafana-ingress.yaml'
     env:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['apply-namespace']
-
-  # Update image tag
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'update-image'
     args:
@@ -70,8 +66,6 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['apply-manifests']
-
-  # Verify rollout
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'verify-rollout'
     args:
@@ -85,7 +79,6 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['update-image']
-
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'show-pods'
     args: ['get','pods','-n','${_NAMESPACE}']
@@ -93,11 +86,9 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['verify-rollout']
-
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA'
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest'
-
 timeout: '1200s'
 options:
   logging: CLOUD_LOGGING_ONLY
