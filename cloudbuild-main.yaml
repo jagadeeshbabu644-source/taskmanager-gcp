@@ -1,29 +1,18 @@
-# Cloud Build: Full Deployment Pipeline
-# Triggered by: Push/merge to main branch
-# Purpose: build image, push to AR, deploy to GKE
-# $PROJECT_ID auto-injected by GCP (never hardcoded)
 substitutions:
-  _REGION:       us-central1
-  _CLUSTER:      taskmanager-cluster
+  _REGION: us-central1
+  _CLUSTER: taskmanager-cluster
   _CLUSTER_ZONE: us-central1-a
-  _NAMESPACE:    taskmanager
-  _AR_REPO:      taskmanager
-  _IMAGE_NAME:   taskmanager
+  _NAMESPACE: taskmanager
+  _AR_REPO: taskmanager
+  _IMAGE_NAME: taskmanager
+
 steps:
-  # Step 1: Build JAR with Maven
   - name: 'maven:3.9-eclipse-temurin-17'
     id: 'build-jar'
     entrypoint: 'mvn'
-    args:
-      - 'clean'
-      - 'package'
-      - '-DskipTests'
-      - '-f'
-      - 'app/pom.xml'
-    env:
-      - 'MAVEN_OPTS=-Xmx512m'
-  # Step 2: Build Docker image
-  # Tags: $COMMIT_SHA (unique) + latest
+    args: ['clean','package','-DskipTests','-f','app/pom.xml']
+    env: ['MAVEN_OPTS=-Xmx512m']
+
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args:
@@ -34,8 +23,7 @@ steps:
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest'
       - './app'
     waitFor: ['build-jar']
-  # Step 3: Push to Artifact Registry
-  # $PROJECT_ID auto-injected - NOT hardcoded
+
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args:
@@ -43,22 +31,32 @@ steps:
       - '--all-tags'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}'
     waitFor: ['build-image']
-  # Step 4: Apply all K8s manifests
-  # Creates/updates: namespace, configmap,
-  # deployment, service, ingress, hpa,
-  # servicemonitor
+
+  # Apply namespace FIRST
   - name: 'gcr.io/cloud-builders/kubectl'
-    id: 'apply-manifests'
-    args:
-      - 'apply'
-      - '-f'
-      - 'k8s/'
+    id: 'apply-namespace'
+    args: ['apply','-f','k8s/namespace.yaml']
     env:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['push-image']
-  # Step 5: Update deployment with new image tag
-  # $COMMIT_SHA links image back to exact git commit
+
+  # Apply core manifests AFTER namespace
+  - name: 'gcr.io/cloud-builders/kubectl'
+    id: 'apply-manifests'
+    args:
+      - 'apply'
+      - '-f','k8s/configmap.yaml'
+      - '-f','k8s/deployment.yaml'
+      - '-f','k8s/service.yaml'
+      - '-f','k8s/hpa.yaml'
+      - '-f','k8s/grafana-ingress.yaml'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
+    waitFor: ['apply-namespace']
+
+  # Update image tag
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'update-image'
     args:
@@ -72,7 +70,8 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['apply-manifests']
-  # Step 6: Wait for rollout to complete
+
+  # Verify rollout
   - name: 'gcr.io/cloud-builders/kubectl'
     id: 'verify-rollout'
     args:
@@ -86,27 +85,20 @@ steps:
       - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
       - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['update-image']
-  # Step 7: Show final status
+
   - name: 'gcr.io/cloud-builders/kubectl'
-    id: 'show-status'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        export CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}
-        export CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}
-        gcloud container clusters get-credentials           ${_CLUSTER} --zone ${_CLUSTER_ZONE}
-        echo "================================"
-        echo "  Deployment Complete!"
-        echo "  Image tag: $SHORT_SHA"
-        echo "================================"
-        kubectl get pods -n ${_NAMESPACE}
-        kubectl get ingress -n monitoring
+    id: 'show-pods'
+    args: ['get','pods','-n','${_NAMESPACE}']
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=${_CLUSTER_ZONE}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=${_CLUSTER}'
     waitFor: ['verify-rollout']
+
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:$COMMIT_SHA'
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_IMAGE_NAME}:latest'
+
 timeout: '1200s'
 options:
-  logging:     CLOUD_LOGGING_ONLY
+  logging: CLOUD_LOGGING_ONLY
   machineType: E2_MEDIUM
