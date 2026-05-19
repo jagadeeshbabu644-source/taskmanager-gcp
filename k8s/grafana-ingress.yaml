@@ -1,27 +1,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: main-ingress
+  name: grafana-ingress
   namespace: monitoring
   annotations:
     kubernetes.io/ingress.class: "gce"
-    kubernetes.io/ingress.global-static-ip-name: "taskmanager-ip"
+    kubernetes.io/ingress.global-static-ip-name: "grafana-ip"
     kubernetes.io/ingress.allow-http: "true"
+
 spec:
   rules:
     - http:
         paths:
-          - path: /grafana
-            pathType: Prefix
-            backend:
-              service:
-                name: kube-prometheus-stack-grafana
-                port:
-                  number: 80
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: taskmanager-svc
+                name: kube-prometheus-stack-grafana
                 port:
                   number: 80

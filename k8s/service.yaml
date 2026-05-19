@@ -3,13 +3,20 @@ kind: Service
 metadata:
   name: taskmanager-svc
   namespace: taskmanager
+  labels:
+    app: taskmanager
+
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
+
 spec:
   selector:
     app: taskmanager
+
   ports:
     - name: http
       port: 80
       targetPort: 8080
+
   type: ClusterIP
+  

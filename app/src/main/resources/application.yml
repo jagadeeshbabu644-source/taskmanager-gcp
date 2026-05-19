@@ -1,13 +1,26 @@
-server:
-  port: 8080
-spring:
-  application:
-    name: taskmanager
 management:
   endpoints:
     web:
       exposure:
-        include: "health,info,prometheus,metrics"
+        include: health,info,prometheus,metrics
+
   endpoint:
     health:
       show-details: always
+
+  metrics:
+    web:
+      server:
+        auto-time-requests: true
+
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
+
+spring:
+  security:
+    user:
+      name: admin
+      password: admin
