@@ -9,7 +9,7 @@
 - **CI/CD**: Google Cloud Build (GitOps)
 - **Observability**: Cloud Logging + Cloud Monitoring
   + Prometheus + Grafana OSS
-
+  
 ## Grafana Dashboard Panels
 1. Traffic (RPS) — requests per second
 2. Error Rate (%) — percentage of 5xx responses
