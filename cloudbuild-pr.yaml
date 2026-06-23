@@ -2,6 +2,7 @@
 # Triggered by: Pull Request opened against main
 # Purpose: verify code compiles and image builds
 # Does NOT push image or deploy to GKE
+#Sample comments
 substitutions:
   _REGION:     us-central1
   _AR_REPO:    taskmanager
