@@ -77,7 +77,7 @@ jobs:
                 continue;
               }
 
-              console.log(`   🔒 Closing PR #${prNumber} ...`);
+              console.log(`   🔒 Closing the PR #${prNumber} ...`);
 
               await github.rest.issues.createComment({
                 owner,
