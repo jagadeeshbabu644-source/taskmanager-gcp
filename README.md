@@ -102,6 +102,7 @@ Rollback: git revert -> merge -> Cloud Build redeploys
 - No direct pushes to main allowed
 
 ## Sensitive Info Handling
+## Sample comments
 - Project ID: TF_VAR_project_id env var (not in any file)
 - terraform.tfvars: in .gitignore (never committed)
 - cloudbuild yaml: uses $PROJECT_ID (GCP auto-injects)
