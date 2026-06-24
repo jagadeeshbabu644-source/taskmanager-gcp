@@ -19,11 +19,12 @@ jobs:
             const owner = context.repo.owner;
             const repo  = context.repo.repo;
 
-            const now          = new Date();
-            const ONE_DAY_MS   = 24 * 60 * 60 * 1000;
-            const ONE_HOUR_MS  = 60 * 60 * 1000;
+            const now           = new Date();
+            const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+            const ONE_HOUR_MS   = 60 * 60 * 1000;
 
-            const BOT_WARNING_MARKER = '<!-- stale-pr-warning -->';
+            const BOT_WARNING_MARKER  = '<!-- stale-pr-warning -->';
+            const BOT_REMINDER_MARKER = '<!-- stale-pr-reminder -->';
 
             const { data: pullRequests } = await github.rest.pulls.list({
               owner, repo, state: 'open', per_page: 100,
@@ -37,12 +38,14 @@ jobs:
               const labels    = pr.labels.map(l => l.name);
               const createdAt = new Date(pr.created_at);
               const ageMs     = now - createdAt;
+              const ageHrs    = (ageMs / ONE_HOUR_MS).toFixed(2);
 
               console.log(`\n── PR #${prNumber}: "${prTitle}"`);
               console.log(`   Labels : ${labels.length ? labels.join(', ') : '(none)'}`);
               console.log(`   Draft  : ${pr.draft}`);
-              console.log(`   Age    : ${(ageMs / ONE_DAY_MS).toFixed(2)} day(s)`);
+              console.log(`   Age    : ${ageHrs} hour(s)`);
 
+              // ── Always skip these ──
               if (pr.draft) {
                 console.log('   ⏭  Skipping — draft PR.');
                 continue;
@@ -51,77 +54,44 @@ jobs:
                 console.log('   ⏭  Skipping — has "keep-open" label.');
                 continue;
               }
-              if (ageMs < ONE_DAY_MS) {
-                console.log('   ⏭  Skipping — PR is less than 1 day old.');
+
+              // Less than 1 hour old — too early to do anything
+              if (ageMs < ONE_HOUR_MS) {
+                console.log('   ⏭  Skipping — PR is less than 1 hour old.');
                 continue;
               }
 
+              // Fetch all comments
               const { data: comments } = await github.rest.issues.listComments({
                 owner, repo, issue_number: prNumber, per_page: 100,
               });
 
-              // Find any existing warning comment posted by this bot
-              const warningComment = comments.find(c => c.body.includes(BOT_WARNING_MARKER));
+              // Find bot comments
+              const warningComment   = comments.find(c => c.body.includes(BOT_WARNING_MARKER));
+              const reminderComments = comments.filter(c => c.body.includes(BOT_REMINDER_MARKER));
+              const lastReminder     = reminderComments.at(-1);
 
-              if (!warningComment) {
-                // Phase 1 — No warning yet, post one and give 1 hour
-                console.log(`   ⚠️  Posting warning comment on PR #${prNumber} ...`);
+              // Check if any human responded after the first bot comment
+              const firstBotComment = warningComment ?? reminderComments[0] ?? null;
+              const humanResponded  = firstBotComment
+                ? comments.some(c =>
+                    c.user.type !== 'Bot' &&
+                    !c.user.login.includes('[bot]') &&
+                    new Date(c.created_at) > new Date(firstBotComment.created_at)
+                  )
+                : false;
+
+              if (humanResponded) {
+                console.log('   ⏭  Skipping — human responded after warning.');
+                continue;
+              }
+
+              // ── Phase 3: Close — PR is 4+ hours old and warning was already sent ──
+              if (ageMs >= FOUR_HOURS_MS && warningComment) {
+                console.log(`   🔒 Closing PR #${prNumber} — open 4+ hours with no response ...`);
                 await github.rest.issues.createComment({
                   owner, repo, issue_number: prNumber,
                   body: [
-                    BOT_WARNING_MARKER,
-                    '⚠️ **This PR is about to be automatically closed** because it has been open for more than **1 day** with no recent activity.',
-                    '',
-                    'You have **1 hour** to take one of the following actions to keep it open:',
-                    '- Add the `keep-open` label to this PR, or',
-                    '- Leave a comment on this PR',
-                    '',
-                    'If no action is taken within 1 hour, this PR will be closed automatically.',
-                  ].join('\n'),
-                });
-                console.log(`   ✅ Warning posted on PR #${prNumber}. Will close in ~1 hour if no response.`);
-                continue;
-              }
-
-              // Phase 2 — Warning already exists, check if response came in
-              const warningPostedAt = new Date(warningComment.created_at);
-              const timeSinceWarning = now - warningPostedAt;
-
-              if (timeSinceWarning < ONE_HOUR_MS) {
-                console.log(`   ⏭  Skipping — warning posted, but 1-hour grace period not yet elapsed (${Math.round(timeSinceWarning / 60000)} min elapsed).`);
-                continue;
-              }
-
-              // Check if anyone responded after the warning was posted
-              const responseAfterWarning = comments.find(c =>
-                c.id !== warningComment.id &&
-                new Date(c.created_at) > warningPostedAt
-              );
-
-              if (responseAfterWarning) {
-                console.log(`   ⏭  Skipping — someone responded after the warning was posted.`);
-                continue;
-              }
-
-              // Also re-check labels in case keep-open was added after warning
-              if (labels.includes('keep-open')) {
-                console.log('   ⏭  Skipping — "keep-open" label added after warning.');
-                continue;
-              }
-
-              // No response — close the PR
-              console.log(`   🔒 Closing PR #${prNumber} — no response within 1 hour of warning ...`);
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: prNumber,
-                body: [
-                  '🔒 This PR has been **automatically closed** because no action was taken within **1 hour** of the warning.',
-                  '',
-                  'If this was closed by mistake, please reopen it and add the `keep-open` label to prevent future auto-closure.',
-                ].join('\n'),
-              });
-              await github.rest.pulls.update({
-                owner, repo, pull_number: prNumber, state: 'closed',
-              });
-              console.log(`   ✅ PR #${prNumber} closed.`);
-            }
-            console.log('\nDone.');
+                    '🔒 This PR has been **automatically closed** because:',
+                    '- It has been open for more than **4 hours**, and',
+                    '- There was
