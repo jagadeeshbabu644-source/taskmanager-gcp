@@ -94,4 +94,62 @@ jobs:
                   body: [
                     '🔒 This PR has been **automatically closed** because:',
                     '- It has been open for more than **4 hours**, and',
-                    '- There was
+                    '- There was **no response** to the warning.',
+                    '',
+                    'If this was closed by mistake, please reopen it and add the `keep-open` label to prevent future auto-closure.',
+                  ].join('\n'),
+                });
+                await github.rest.pulls.update({
+                  owner, repo, pull_number: prNumber, state: 'closed',
+                });
+                console.log(`   ✅ PR #${prNumber} closed.`);
+                continue;
+              }
+
+              // ── Phase 1: No warning yet — post initial warning ──
+              if (!warningComment) {
+                const hoursLeft = Math.max(0, ((FOUR_HOURS_MS - ageMs) / ONE_HOUR_MS).toFixed(1));
+                console.log(`   ⚠️  Posting initial warning on PR #${prNumber} ...`);
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNumber,
+                  body: [
+                    BOT_WARNING_MARKER,
+                    `⚠️ **Heads up!** This PR has been open for **${ageHrs} hour(s)** with no activity.`,
+                    '',
+                    `It will be **automatically closed in ${hoursLeft} hour(s)** unless:`,
+                    '- You add the `keep-open` label to this PR, or',
+                    '- You leave a comment on this PR',
+                    '',
+                    '🔔 You will receive a reminder every **hour**.',
+                  ].join('\n'),
+                });
+                console.log(`   ✅ Initial warning posted on PR #${prNumber}.`);
+                continue;
+              }
+
+              // ── Phase 2: Warning exists — send reminder every 60 minutes ──
+              const lastBotActivity    = lastReminder
+                ? new Date(lastReminder.created_at)
+                : new Date(warningComment.created_at);
+              const timeSinceLastBot   = now - lastBotActivity;
+
+              if (timeSinceLastBot >= ONE_HOUR_MS) {
+                const minutesLeft = Math.max(0, Math.round((FOUR_HOURS_MS - ageMs) / 60000));
+                const hoursLeft   = (minutesLeft / 60).toFixed(1);
+                console.log(`   🔔 Posting reminder on PR #${prNumber} — ${minutesLeft} min(s) left ...`);
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNumber,
+                  body: [
+                    BOT_REMINDER_MARKER,
+                    `🔔 **Reminder:** This PR will be automatically closed in **${hoursLeft} hour(s)** (${minutesLeft} minutes).`,
+                    '',
+                    'To keep it open, add the `keep-open` label or leave a comment.',
+                  ].join('\n'),
+                });
+                console.log(`   ✅ Reminder posted on PR #${prNumber}.`);
+              } else {
+                console.log(`   ⏭  Skipping reminder — last bot comment was ${Math.round(timeSinceLastBot / 60000)} min(s) ago.`);
+              }
+            }
+
+            console.log('\nDone.');
