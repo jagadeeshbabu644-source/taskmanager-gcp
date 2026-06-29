@@ -1,40 +1,40 @@
 name: Automated PR Cleanup
- 
+
 on:
   schedule:
     - cron: "0 * * * *"
   workflow_dispatch:
- 
+
 jobs:
   cleanup-prs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
- 
+
     steps:
       - name: Cleanup Stale Pull Requests
         uses: actions/github-script@v7
         with:
           script: |
             const TEST_PR_NUMBERS = [101, 102];
- 
+
             // ⏱️ TEST thresholds - PR open > 1 hour, inactive > 30 mins
             const WARNING_AGE_HOURS = 1;
             const WARNING_INACTIVE_MINUTES = 30;
- 
+
             const CLOSE_AGE_HOURS = 1;
             const CLOSE_INACTIVE_MINUTES = 45;
- 
+
             /*
             // 🚀 PRODUCTION thresholds (uncomment when done testing)
             const WARNING_AGE_HOURS = 14 * 24;
             const WARNING_INACTIVE_MINUTES = 8 * 24 * 60;
- 
+
             const CLOSE_AGE_HOURS = 16 * 24;
             const CLOSE_INACTIVE_MINUTES = 10 * 24 * 60;
             */
- 
+
             const EXCEPTION_LABELS = [
               "keep-open",
               "long-running",
@@ -42,11 +42,11 @@ jobs:
               "review-pending",
               "high-priority"
             ];
- 
+
             const WARNING_LABEL = "auto-close-warning";
             const OWNER_RESPONDED_LABEL = "owner-responded";
             const now = new Date();
- 
+
             const prs = await github.paginate(
               github.rest.pulls.list,
               {
@@ -56,34 +56,34 @@ jobs:
                 per_page: 100
               }
             );
- 
+
             for (const pr of prs) {
- 
+
               if (!TEST_PR_NUMBERS.includes(pr.number)) {
                 console.log(`Skipping PR #${pr.number}`);
                 continue;
               }
- 
+
               const createdAt = new Date(pr.created_at);
               const updatedAt = new Date(pr.updated_at);
- 
+
               const hoursSinceCreation =
                 (now - createdAt) / (1000 * 60 * 60);
- 
+
               const minutesSinceUpdate =
                 (now - updatedAt) / (1000 * 60);
- 
+
               const labels = pr.labels.map(l => l.name);
               const hasWarning = labels.includes(WARNING_LABEL);
- 
+
               console.log(`Testing PR #${pr.number}`);
               console.log(`  Open for: ${hoursSinceCreation.toFixed(2)} hours`);
               console.log(`  Inactive for: ${minutesSinceUpdate.toFixed(2)} minutes`);
- 
+
               if (pr.draft) continue;
- 
+
               if (labels.some(label => EXCEPTION_LABELS.includes(label))) continue;
- 
+
               // Remove warning if active again (updated within 30 mins)
               if (hasWarning && minutesSinceUpdate <= WARNING_INACTIVE_MINUTES) {
                 console.log(`PR #${pr.number} is active again. Removing warning.`);
@@ -94,7 +94,7 @@ jobs:
                   name: WARNING_LABEL
                 });
               }
- 
+
               // ✅ Warning Stage
               if (
                 hoursSinceCreation > WARNING_AGE_HOURS &&
@@ -106,23 +106,19 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: `⚠️ TEST MODE
- 
-This PR is inactive.
- 
-Will be closed soon if no updates.`
+                  body: "⚠️ TEST MODE\n\nThis PR is inactive.\n\nWill be closed soon if no updates."
                 });
- 
+
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
                   labels: [WARNING_LABEL]
                 });
- 
+
                 continue;
               }
- 
+
               // ✅ Check if PR owner responded to warning comment
               if (hasWarning) {
                 const comments = await github.paginate(
@@ -134,50 +130,48 @@ Will be closed soon if no updates.`
                     per_page: 100
                   }
                 );
- 
-                // Find the warning comment posted by the bot
+
                 const warningComment = comments.find(c =>
                   c.body.includes("Will be closed soon if no updates")
                 );
- 
+
                 if (warningComment) {
                   const warningPostedAt = new Date(warningComment.created_at);
- 
-                  // Check if PR owner commented AFTER the warning was posted
+
                   const ownerReplied = comments.some(c =>
                     c.user.login === pr.user.login &&
                     new Date(c.created_at) > warningPostedAt
                   );
- 
+
                   if (ownerReplied) {
                     console.log(`PR #${pr.number} owner responded. Skipping closure.`);
- 
+
                     await github.rest.issues.removeLabel({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: pr.number,
                       name: WARNING_LABEL
                     });
- 
+
                     await github.rest.issues.addLabels({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: pr.number,
                       labels: [OWNER_RESPONDED_LABEL]
                     });
- 
+
                     await github.rest.issues.createComment({
                       owner: context.repo.owner,
                       repo: context.repo.repo,
                       issue_number: pr.number,
-                      body: `✅ Thanks for the update! The auto-close warning has been removed. This PR will not be closed automatically.`
+                      body: "✅ Thanks for the update! The auto-close warning has been removed. This PR will not be closed automatically."
                     });
- 
+
                     continue;
                   }
                 }
               }
- 
+
               // ✅ Closure Stage (ONLY if warning exists)
               if (
                 hoursSinceCreation > CLOSE_AGE_HOURS &&
@@ -189,11 +183,9 @@ Will be closed soon if no updates.`
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: `🔴 TEST MODE
- 
-Closing PR due to inactivity.`
+                  body: "🔴 TEST MODE\n\nClosing PR due to inactivity."
                 });
- 
+
                 await github.rest.pulls.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -202,4 +194,3 @@ Closing PR due to inactivity.`
                 });
               }
             }
- 
