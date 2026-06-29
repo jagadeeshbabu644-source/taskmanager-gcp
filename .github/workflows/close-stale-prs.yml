@@ -17,7 +17,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const TEST_PR_NUMBERS = [101, 102];
+            const TEST_PR_NUMBERS = [9, 11];
 
             // ⏱️ TEST thresholds - PR open > 1 hour, inactive > 30 mins
             const WARNING_AGE_HOURS = 1;
