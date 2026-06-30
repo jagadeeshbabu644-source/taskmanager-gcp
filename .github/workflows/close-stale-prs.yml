@@ -99,12 +99,11 @@ jobs:
               console.log(`   Draft   : ${pr.draft}`);
               console.log(`   Warning : ${hasWarning}`);
 
-              // ----------------------------------------------------------
               // 📊 GATE CHECKS — Draft & Exception Labels
               // ----------------------------------------------------------
               console.log("\n   📊 Gate Checks:");
-              console.log(`   [${pr.draft            ? "❌ FAIL" : "✅ PASS"}] Not a draft PR`);
-              console.log(`   [${hasExceptionLabel   ? "❌ FAIL" : "✅ PASS"}] No exception labels${hasExceptionLabel ? " → found: " + matchedExceptions.join(", ") : ""}`);
+              console.log(`   [${pr.draft ? "⏭️  YES" : "✅ NO "}] Is a draft PR${pr.draft ? " → will be skipped" : ""}`);
+              console.log(`   [${hasExceptionLabel ? "⏭️  YES" : "✅ NO "}] Has exception labels${hasExceptionLabel ? " → found: " + matchedExceptions.join(", ") + " → will be skipped" : ""}`);
 
               if (pr.draft) {
 
