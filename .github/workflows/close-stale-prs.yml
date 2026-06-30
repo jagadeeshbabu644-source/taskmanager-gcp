@@ -94,8 +94,7 @@ jobs:
               const matchedExceptions = labels.filter(l => EXCEPTION_LABELS.includes(l));
 
               console.log(`   Created : ${createdAt.toISOString()} (${daysSinceCreation.toFixed(1)} days ago)`);
-              console.log(`   Updated : ${updatedAt.toIS
-OString()} (${daysSinceUpdate.toFixed(1)} days ago)`);
+              console.log(`   Updated : ${updatedAt.toISOString()} (${daysSinceUpdate.toFixed(1)} days ago)`);
               console.log(`   Labels  : ${labels.length > 0 ? labels.join(", ") : "none"}`);
               console.log(`   Draft   : ${pr.draft}`);
               console.log(`   Warning : ${hasWarning}`);
