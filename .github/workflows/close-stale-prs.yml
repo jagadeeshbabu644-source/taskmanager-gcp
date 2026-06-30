@@ -118,11 +118,10 @@ jobs:
                 continue;
               }
 
-              // ------------
-----------------------------------------------
+              // -=============================================================
               // 🔄 RECOVERY CHECK — Remove warning if PR became active again
               //    Triggers when: has warning label AND updated within CLOSE_INACTIVE_DAYS
-              // ----------------------------------------------------------
+              // ======================================================================
               console.log("\n   🔄 Recovery / Activity Reset Check:");
               console.log(`   [${hasWarning ? "✅" : "➖"}] Has warning label           : ${hasWarning}`);
               console.log(`   [${daysSinceUpdate <= CLOSE_INACTIVE_DAYS ? "✅ PASS" : "❌ FAIL"}] Updated within ${CLOSE_INACTIVE_DAYS} days       : last updated ${daysSinceUpdate.toFixed(1)} days ago`);
