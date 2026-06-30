@@ -1,8 +1,9 @@
+
 name: Automated PR Cleanup
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -17,36 +18,49 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const TEST_PR_NUMBERS = [9, 11,18,19,20,21,22];
+            // ============================================================
+            // 🚀 PRODUCTION THRESHOLDS
+            // ============================================================
+            const WARNING_AGE_DAYS        = 14;       // Warn after 14 days open
+            const WARNING_INACTIVE_DAYS   = 14;       // Warn if inactive for 14 days
+            const CLOSE_AGE_DAYS          = 16;       // Close after 16 days open
+            const CLOSE_INACTIVE_DAYS     = 10;       // Close if inactive for 10 days
 
-            // ⏱️ TEST thresholds - PR open > 1 hour, inactive > 30 mins
-            const WARNING_AGE_HOURS = 1;
-            const WARNING_INACTIVE_MINUTES = 30;
-
-            const CLOSE_AGE_HOURS = 1;
-            const CLOSE_INACTIVE_MINUTES = 45;
-
-            /*
-            // 🚀 PRODUCTION thresholds (uncomment when done testing)
-            const WARNING_AGE_HOURS = 14 * 24;
-            const WARNING_INACTIVE_MINUTES = 8 * 24 * 60;
-
-            const CLOSE_AGE_HOURS = 16 * 24;
-            const CLOSE_INACTIVE_MINUTES = 10 * 24 * 60;
-            */
+            // ============================================================
+            // 🏷️ LABELS
+            // ============================================================
+            const WARNING_LABEL = "auto-close-warning";
 
             const EXCEPTION_LABELS = [
               "keep-open",
               "long-running",
               "blocked",
               "review-pending",
-              "high-priority"
+              "high-priority",
+              "owner-responded"
             ];
 
-            const WARNING_LABEL = "auto-close-warning";
-            const OWNER_RESPONDED_LABEL = "owner-responded";
+            // ============================================================
+            // ⏱️ TIME HELPERS
+            // ============================================================
             const now = new Date();
+            const toDays = (ms) => ms / (1000 * 60 * 60 * 24);
 
+            // ============================================================
+            // 📋 STARTUP LOGS
+            // ============================================================
+            console.log("========================================");
+            console.log("🤖 PR Cleanup Workflow Started");
+            console.log(`🕐 Current Time       : ${now.toISOString()}`);
+            console.log(`⚙️  Warning After      : ${WARNING_AGE_DAYS} days open + ${WARNING_INACTIVE_DAYS} days inactive`);
+            console.log(`⚙️  Close After        : ${CLOSE_AGE_DAYS} days open + ${CLOSE_INACTIVE_DAYS} days inactive`);
+            console.log(`🏷️  Warning Label      : ${WARNING_LABEL}`);
+            console.log(`🏷️  Exception Labels   : ${EXCEPTION_LABELS.join(", ")}`);
+            console.log("========================================\n");
+
+            // ============================================================
+            // 📥 FETCH ALL OPEN PRs
+            // ============================================================
             const prs = await github.paginate(
               github.rest.pulls.list,
               {
@@ -57,57 +71,114 @@ jobs:
               }
             );
 
+            console.log(`📋 Total open PRs found: ${prs.length}\n`);
+
+            // ============================================================
+            // 🔁 PROCESS EACH PR
+            // ============================================================
             for (const pr of prs) {
 
-              if (!TEST_PR_NUMBERS.includes(pr.number)) {
-                console.log(`Skipping PR #${pr.number}`);
-                continue;
-              }
+              console.log("----------------------------------------");
+              console.log(`🔍 PR #${pr.number} - "${pr.title}"`);
+              console.log(`   Author  : ${pr.user.login}`);
 
               const createdAt = new Date(pr.created_at);
               const updatedAt = new Date(pr.updated_at);
 
-              const hoursSinceCreation =
-                (now - createdAt) / (1000 * 60 * 60);
+              const daysSinceCreation = toDays(now - createdAt);
+              const daysSinceUpdate   = toDays(now - updatedAt);
 
-              const minutesSinceUpdate =
-                (now - updatedAt) / (1000 * 60);
+              const labels            = pr.labels.map(l => l.name);
+              const hasWarning        = labels.includes(WARNING_LABEL);
+              const hasExceptionLabel = labels.some(l => EXCEPTION_LABELS.includes(l));
+              const matchedExceptions = labels.filter(l => EXCEPTION_LABELS.includes(l));
 
-              const labels = pr.labels.map(l => l.name);
-              const hasWarning = labels.includes(WARNING_LABEL);
+              console.log(`   Created : ${createdAt.toISOString()} (${daysSinceCreation.toFixed(1)} days ago)`);
+              console.log(`   Updated : ${updatedAt.toIS
+OString()} (${daysSinceUpdate.toFixed(1)} days ago)`);
+              console.log(`   Labels  : ${labels.length > 0 ? labels.join(", ") : "none"}`);
+              console.log(`   Draft   : ${pr.draft}`);
+              console.log(`   Warning : ${hasWarning}`);
 
-              console.log(`Testing PR #${pr.number}`);
-              console.log(`  Open for: ${hoursSinceCreation.toFixed(2)} hours`);
-              console.log(`  Inactive for: ${minutesSinceUpdate.toFixed(2)} minutes`);
+              // ----------------------------------------------------------
+              // 📊 GATE CHECKS — Draft & Exception Labels
+              // ----------------------------------------------------------
+              console.log("\n   📊 Gate Checks:");
+              console.log(`   [${pr.draft            ? "❌ FAIL" : "✅ PASS"}] Not a draft PR`);
+              console.log(`   [${hasExceptionLabel   ? "❌ FAIL" : "✅ PASS"}] No exception labels${hasExceptionLabel ? " → found: " + matchedExceptions.join(", ") : ""}`);
 
-              if (pr.draft) continue;
+              if (pr.draft) {
 
-              if (labels.some(label => EXCEPTION_LABELS.includes(label))) continue;
 
-              // Remove warning if active again (updated within 30 mins)
-              if (hasWarning && minutesSinceUpdate <= WARNING_INACTIVE_MINUTES) {
-                console.log(`PR #${pr.number} is active again. Removing warning.`);
-                await github.rest.issues.removeLabel({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  name: WARNING_LABEL
-                });
+                console.log("   ⏭️  SKIPPED: PR is a draft — drafts are never auto-closed\n");
+                continue;
               }
 
-              // ✅ Warning Stage
-              if (
-                hoursSinceCreation > WARNING_AGE_HOURS &&
-                minutesSinceUpdate > WARNING_INACTIVE_MINUTES &&
-                !hasWarning
-              ) {
-                console.log(`PR #${pr.number} triggering WARNING stage`);
+              if (hasExceptionLabel) {
+                console.log(`   ⏭️  SKIPPED: Has exception label(s): ${matchedExceptions.join(", ")}\n`);
+                continue;
+              }
+
+              // ------------
+----------------------------------------------
+              // 🔄 RECOVERY CHECK — Remove warning if PR became active again
+              //    Triggers when: has warning label AND updated within CLOSE_INACTIVE_DAYS
+              // ----------------------------------------------------------
+              console.log("\n   🔄 Recovery / Activity Reset Check:");
+              console.log(`   [${hasWarning ? "✅" : "➖"}] Has warning label           : ${hasWarning}`);
+              console.log(`   [${daysSinceUpdate <= CLOSE_INACTIVE_DAYS ? "✅ PASS" : "❌ FAIL"}] Updated within ${CLOSE_INACTIVE_DAYS} days       : last updated ${daysSinceUpdate.toFixed(1)} days ago`);
+
+              if (hasWarning && daysSinceUpdate <= CLOSE_INACTIVE_DAYS) {
+                console.log("   ✅ CONDITIONS MET → PR is active again, removing warning label");
+
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: pr.number,
+                    name: WARNING_LABEL
+                  });
+                  console.log(`   🏷️  Removed label: ${WARNING_LABEL}`);
+                } catch (e) {
+                  console.log(`   ⚠️  Could not remove label (may already be removed): ${e.message}`);
+                }
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: "⚠️ TEST MODE\n\nThis PR is inactive.\n\nWill be closed soon if no updates."
+                  body: "✅ **Auto-close warning removed!**\n\nThis PR has shown recent activity and will no longer be automatically closed.\n\nThank you for keeping this PR active! If you'd like to prevent future warnings, consider adding one of these labels:\n- `keep-open`\n- `long-running`\n- `blocked`\n- `review-pending`\n- `high-priority`"
                 });
+                console.log("   💬 Recovery comment posted");
+                console.log("   ⏭️  Skipping further checks for this PR\n");
+                continue;
+              } else {
+                console.log("   ➖ CONDITIONS NOT MET → No recovery needed");
+              }
+
+              // ----------------------------------------------------------
+              // ⚠️ WARNING STAGE
+              //    Triggers when: open > 14 days AND inactive > 14 days AND no warning yet
+              // ----------------------------------------------------------
+              const warnCond1 = daysSinceCreation > WARNING_AGE_DAYS;
+              const warnCond2 = daysSinceUpdate   > WARNING_INACTIVE_DAYS;
+              const warnCond3 = !hasWarning;
+
+              console.log("\n   ⚠️  Warning Stage Conditions:");
+              console.log(`   [${warnCond1 ? "✅ PASS" : "❌ FAIL"}] Open > ${WARNING_AGE_DAYS} days           : actual ${daysSinceCreation.toFixed(1)} days`);
+              console.log(`   [${warnCond2 ? "✅ PASS" : "❌ FAIL"}] Inactive > ${WARNING_INACTIVE_DAYS} days       : actual ${daysSinceUpdate.toFixed(1)} days`);
+              console.log(`   [${warnCond3 ? "✅ PASS" : "❌ FAIL"}] No warning label yet       : hasWarning = ${hasWarning}`);
+
+              if (warnCond1 && warnCond2 && warnCond3) {
+                console.log("   ✅ ALL CONDITIONS MET → Posting warning comment and adding label");
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: "⚠️ **This PR has been inactive for 14 days.**\n\nIt will be **automatically closed in 2 days** unless:\n\n- ✅ Activity resumes (new commit, comment, or review)\n- ✅ You add one of the following labels to keep it open:\n  - `keep-open`\n  - `long-running`\n  - `blocked`\n  - `review-pending`\n  - `high-priority`\n\nIf this PR is still relevant, please leave a comment or push an update. Otherwise, it will be closed automatically to keep the repository tidy."
+                });
+                console.log("   💬 Warning comment posted");
 
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -115,82 +186,59 @@ jobs:
                   issue_number: pr.number,
                   labels: [WARNING_LABEL]
                 });
-
+                console.log(`   🏷️  Added label: ${WARNING_LABEL}`);
+                console.log("   ⏭️  Warning posted — closure check deferred to next run\n");
                 continue;
+              } else {
+                console.log("   ➖ CONDITIONS NOT MET → Warning stage skipped");
               }
 
-              // ✅ Check if PR owner responded to warning comment
-              if (hasWarning) {
-                const comments = await github.paginate(
-                  github.rest.issues.listComments,
-                  {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    per_page: 100
-                  }
-                );
+              // ----------------------------------------------------------
+              // 🔴 CLOSURE STAGE
+              //    Triggers when: open > 16 days AND inactive > 10 days AND warning label exists
+              //    NOTE: Only closes PR — does NOT merge, does NOT delete branch
+              // ----------------------------------------------------------
+              const closeCond1 = daysSinceCreation > CLOSE_AGE_DAYS;
+              const closeCond2 = daysSinceUpdate   > CLOSE_INACTIVE_DAYS;
+              const closeCond3 = hasWarning;
 
-                const warningComment = comments.find(c =>
-                  c.body.includes("Will be closed soon if no updates")
-                );
+              console.log("\n   🔴 Closure Stage Conditions:");
+              console.log(`   [${closeCond1 ? "✅ PASS" : "❌ FAIL"}] Open > ${CLOSE_AGE_DAYS} days           : actual ${daysSinceCreation.toFixed(1)} days`);
+              console.log(`   [${closeCond2 ? "✅ PASS" : "❌ FAIL"}] Inactive > ${CLOSE_INACTIVE_DAYS} days        : actual ${daysSinceUpdate.toFixed(1)} days`);
+              console.log(`   [${closeCond3 ? "✅ PASS" : "❌ FAIL"}] Warning label exists       : hasWarning = ${hasWarning}`);
 
-                if (warningComment) {
-                  const warningPostedAt = new Date(warningComment.created_at);
+              if (closeCond1 && closeCond2 && closeCond3) {
+                console.log("   ✅ ALL CONDITIONS MET → Closing PR (no merge, no branch delete)");
 
-                  const ownerReplied = comments.some(c =>
-                    c.user.login === pr.user.login &&
-                    new Date(c.created_at) > warningPostedAt
-                  );
-
-                  if (ownerReplied) {
-                    console.log(`PR #${pr.number} owner responded. Skipping closure.`);
-
-                    await github.rest.issues.removeLabel({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: pr.number,
-                      name: WARNING_LABEL
-                    });
-
-                    await github.rest.issues.addLabels({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: pr.number,
-                      labels: [OWNER_RESPONDED_LABEL]
-                    });
-
-                    await github.rest.issues.createComment({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: pr.number,
-                      body: "✅ Thanks for the update! The auto-close warning has been removed. This PR will not be closed automatically."
-                    });
-
-                    continue;
-                  }
-                }
-              }
-
-              // ✅ Closure Stage (ONLY if warning exists)
-              if (
-                hoursSinceCreation > CLOSE_AGE_HOURS &&
-                minutesSinceUpdate > CLOSE_INACTIVE_MINUTES &&
-                hasWarning
-              ) {
-                console.log(`PR #${pr.number} triggering CLOSURE stage`);
+                // Post closure message BEFORE closing
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: "🔴 TEST MODE\n\nClosing PR due to inactivity."
+                  body: "🔴 **This PR has been automatically closed due to inactivity.**\n\nNo activity was detected for over 10 days after the warning was posted.\n\n**This PR can be reopened at any time** — your branch and all changes are preserved.\n\nTo prevent auto-closing in the future, add one of these labels before the warning period ends:\n- `keep-open`\n- `long-running`\n- `blocked`\n- `review-pending`\n- `high-priority`"
                 });
+                console.log("   💬 Closure message posted");
 
+                // Close the PR only — no merge, no branch deletion
                 await github.rest.pulls.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: pr.number,
                   state: "closed"
                 });
+                console.log(`   🔒 PR #${pr.number} CLOSED (branch preserved, not merged)`);
+
+              } else {
+                console.log("   ➖ CONDITIONS NOT MET → PR stays open");
               }
+
+              console.log("");
             }
+
+            // ============================================================
+            // ✅ DONE
+            // ============================================================
+            console.log("========================================");
+            console.log("✅ PR Cleanup Workflow Completed");
+            console.log(`🕐 Finished at: ${new Date().toISOString()}`);
+            console.log("========================================");
