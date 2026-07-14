@@ -1,4 +1,3 @@
-
 name: Automated PR Cleanup
 
 on:
@@ -18,49 +17,47 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // ============================================================
-            // 🚀 PRODUCTION THRESHOLDS
-            // ============================================================
-            const WARNING_AGE_DAYS        = 14;       // Warn after 14 days open
-            const WARNING_INACTIVE_DAYS   = 14;       // Warn if inactive for 14 days
-            const CLOSE_AGE_DAYS          = 16;       // Close after 16 days open
-            const CLOSE_INACTIVE_DAYS     = 10;       // Close if inactive for 10 days
+            //====================================================
+            // THRESHOLDS
+            //====================================================
+            const WARNING_AGE_DAYS      = 14; //Warn after 14 days of open
+            const WARNING_INACTIVE_DAYS = 14; //Warn if inactive for 14 days
+            const CLOSE_AGE_DAYS        = 16; //Close after 16 days of open
+            const CLOSE_INACTIVE_DAYS   = 10; //Close if inactive for 10 days
 
-            // ============================================================
-            // 🏷️ LABELS
-            // ============================================================
+            //====================================================
+            // LABELS
+            //====================================================
             const WARNING_LABEL = "auto-close-warning";
-
             const EXCEPTION_LABELS = [
               "keep-open",
               "long-running",
               "blocked",
               "review-pending",
-              "high-priority",
-              "owner-responded"
+              "high-priority"
             ];
 
-            // ============================================================
-            // ⏱️ TIME HELPERS
-            // ============================================================
+            //====================================================
+            // TIME HELPERS
+            //====================================================
             const now = new Date();
             const toDays = (ms) => ms / (1000 * 60 * 60 * 24);
 
-            // ============================================================
-            // 📋 STARTUP LOGS
-            // ============================================================
-            console.log("========================================");
-            console.log("🤖 PR Cleanup Workflow Started");
-            console.log(`🕐 Current Time       : ${now.toISOString()}`);
-            console.log(`⚙️  Warning After      : ${WARNING_AGE_DAYS} days open + ${WARNING_INACTIVE_DAYS} days inactive`);
-            console.log(`⚙️  Close After        : ${CLOSE_AGE_DAYS} days open + ${CLOSE_INACTIVE_DAYS} days inactive`);
-            console.log(`🏷️  Warning Label      : ${WARNING_LABEL}`);
-            console.log(`🏷️  Exception Labels   : ${EXCEPTION_LABELS.join(", ")}`);
-            console.log("========================================\n");
+            //====================================================
+            // STARTUP LOGS
+            //====================================================
+            console.log("====================================");
+            console.log("PR Cleanup Workflow Started");
+            console.log(`Current Time: ${now.toISOString()}`);
+            console.log(`Warning After: ${WARNING_AGE_DAYS} days open + ${WARNING_INACTIVE_DAYS} days inactive`);
+            console.log(`Close After: ${CLOSE_AGE_DAYS} days open + ${CLOSE_INACTIVE_DAYS} days inactive`);
+            console.log(`Warning Label: ${WARNING_LABEL}`);
+            console.log(`Exception Labels: ${EXCEPTION_LABELS.join(", ")}`);
+            console.log("====================================\n");
 
-            // ============================================================
-            // 📥 FETCH ALL OPEN PRs
-            // ============================================================
+            //====================================================
+            // FETCH ALL OPEN PRS
+            //====================================================
             const prs = await github.paginate(
               github.rest.pulls.list,
               {
@@ -70,63 +67,60 @@ jobs:
                 per_page: 100
               }
             );
+            console.log(`Total Open PRs found: ${prs.length}\n`);
 
-            console.log(`📋 Total open PRs found: ${prs.length}\n`);
-
-            // ============================================================
-            // 🔁 PROCESS EACH PR
-            // ============================================================
+            //====================================================
+            // PROCESS EACH PR
+            //====================================================
             for (const pr of prs) {
-
-              console.log("----------------------------------------");
-              console.log(`🔍 PR #${pr.number} - "${pr.title}"`);
-              console.log(`   Author  : ${pr.user.login}`);
+              console.log("-------------------------------");
+              console.log(`PR #${pr.number} - "${pr.title}"`);
+              console.log(`Author: ${pr.user.login}`);
 
               const createdAt = new Date(pr.created_at);
               const updatedAt = new Date(pr.updated_at);
-
               const daysSinceCreation = toDays(now - createdAt);
               const daysSinceUpdate   = toDays(now - updatedAt);
 
-              const labels            = pr.labels.map(l => l.name);
-              const hasWarning        = labels.includes(WARNING_LABEL);
+              const labels = pr.labels.map(l => l.name);
+              const hasWarning = labels.includes(WARNING_LABEL);
               const hasExceptionLabel = labels.some(l => EXCEPTION_LABELS.includes(l));
               const matchedExceptions = labels.filter(l => EXCEPTION_LABELS.includes(l));
 
-              console.log(`   Created : ${createdAt.toISOString()} (${daysSinceCreation.toFixed(1)} days ago)`);
-              console.log(`   Updated : ${updatedAt.toISOString()} (${daysSinceUpdate.toFixed(1)} days ago)`);
-              console.log(`   Labels  : ${labels.length > 0 ? labels.join(", ") : "none"}`);
-              console.log(`   Draft   : ${pr.draft}`);
-              console.log(`   Warning : ${hasWarning}`);
+              console.log(`Created: ${createdAt.toISOString()} (${daysSinceCreation.toFixed(1)} days ago)`);
+              console.log(`Updated: ${updatedAt.toISOString()} (${daysSinceUpdate.toFixed(1)} days ago)`);
+              console.log(`Labels: ${labels.length > 0 ? labels.join(", ") : "None"}`);
+              console.log(`Draft: ${pr.draft}`);
+              console.log(`Warning: ${hasWarning}`);
 
-              // 📊 GATE CHECKS — Draft & Exception Labels
-              // ----------------------------------------------------------
-              console.log("\n   📊 Gate Checks:");
-              console.log(`   [${pr.draft ? "⏭️  YES" : "✅ NO "}] Is a draft PR${pr.draft ? " → will be skipped" : ""}`);
-              console.log(`   [${hasExceptionLabel ? "⏭️  YES" : "✅ NO "}] Has exception labels${hasExceptionLabel ? " → found: " + matchedExceptions.join(", ") + " → will be skipped" : ""}`);
+              //====================================================
+              // GATE CHECKS - DRAFTS & EXCEPTION LABELS
+              //====================================================
+
+              console.log("\n Gate Checks:");
+              console.log(`  [${pr.draft ? " YES " : " NO "}] Is a draft PR${pr.draft ? " - will be skipped" : ""}`);
+              console.log(`  [${hasExceptionLabel ? " YES " : " NO "}] Has exception label(s)${hasExceptionLabel ? " found: " + matchedExceptions.join(", ") + " -> will be skipped" : ""}`);
 
               if (pr.draft) {
-
-
-                console.log("   ⏭️  SKIPPED: PR is a draft — drafts are never auto-closed\n");
+                console.log(`  Skipped: PR is a draft - drafts are never auto closed\n`);
                 continue;
               }
-
               if (hasExceptionLabel) {
-                console.log(`   ⏭️  SKIPPED: Has exception label(s): ${matchedExceptions.join(", ")}\n`);
+                console.log(`  Skipped: PR has exception label(s): ${matchedExceptions.join(", ")}\n`);
                 continue;
               }
 
-              // -=============================================================
-              // 🔄 RECOVERY CHECK — Remove warning if PR became active again
-              //    Triggers when: has warning label AND updated within CLOSE_INACTIVE_DAYS
-              // ======================================================================
-              console.log("\n   🔄 Recovery / Activity Reset Check:");
-              console.log(`   [${hasWarning ? "✅" : "➖"}] Has warning label           : ${hasWarning}`);
-              console.log(`   [${daysSinceUpdate <= CLOSE_INACTIVE_DAYS ? "✅ PASS" : "❌ FAIL"}] Updated within ${CLOSE_INACTIVE_DAYS} days       : last updated ${daysSinceUpdate.toFixed(1)} days ago`);
+              //====================================================
+              // RECOVERY CHECK - Remove warning if PR became active again
+              // Triggers when: has warning label AND updated within CLOSE_INACTIVE_DAYS
+              //====================================================
+
+              console.log("\n Recovery / Activity Reset Check:");
+              console.log(`  [${hasWarning ? " PASS" : " FAIL"}] Has warning label : ${hasWarning}`);
+              console.log(`  [${daysSinceUpdate <= CLOSE_INACTIVE_DAYS ? " PASS" : " FAIL"}] Updated within ${CLOSE_INACTIVE_DAYS} days : last updated ${daysSinceUpdate.toFixed(1)} days ago`);
 
               if (hasWarning && daysSinceUpdate <= CLOSE_INACTIVE_DAYS) {
-                console.log("   ✅ CONDITIONS MET → PR is active again, removing warning label");
+                console.log(" CONDITIONS MET -> PR is active again, removing warning label");
 
                 try {
                   await github.rest.issues.removeLabel({
@@ -135,47 +129,48 @@ jobs:
                     issue_number: pr.number,
                     name: WARNING_LABEL
                   });
-                  console.log(`   🏷️  Removed label: ${WARNING_LABEL}`);
+                  console.log(` Removed warning label from PR #${pr.number}\n`);
                 } catch (e) {
-                  console.log(`   ⚠️  Could not remove label (may already be removed): ${e.message}`);
+                  console.log(` could not remove label (may already be removed): ${e.message}`);
                 }
 
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: "✅ **Auto-close warning removed!**\n\nThis PR has shown recent activity and will no longer be automatically closed.\n\nThank you for keeping this PR active! If you'd like to prevent future warnings, consider adding one of these labels:\n- `keep-open`\n- `long-running`\n- `blocked`\n- `review-pending`\n- `high-priority`"
+                  body: `** Auto-close warning removed ** \n\n This PR has shown recent activity and will no longer be automatically closed. \n\n If you would like to prevent this PR from being automatically closed in the future, please add one of the following labels: \n\n - \`keep-open\` \n - \`long-running\` \n - \`blocked\` \n - \`review-pending\` \n - \`high-priority\` `
                 });
-                console.log("   💬 Recovery comment posted");
-                console.log("   ⏭️  Skipping further checks for this PR\n");
+                console.log("Recovery comment added to PR\n");
+                console.log("Skipping further checks for this PR\n");
                 continue;
               } else {
-                console.log("   ➖ CONDITIONS NOT MET → No recovery needed");
+                console.log("Conditions not met -> No recovery needed");
               }
 
-              // ----------------------------------------------------------
-              // ⚠️ WARNING STAGE
-              //    Triggers when: open > 14 days AND inactive > 14 days AND no warning yet
-              // ----------------------------------------------------------
+              //====================================================
+              // WARNING STAGE
+              // Triggers when: open >14 days AND inactive >14 days AND no warning yet
+              //====================================================
+
               const warnCond1 = daysSinceCreation > WARNING_AGE_DAYS;
               const warnCond2 = daysSinceUpdate   > WARNING_INACTIVE_DAYS;
               const warnCond3 = !hasWarning;
 
-              console.log("\n   ⚠️  Warning Stage Conditions:");
-              console.log(`   [${warnCond1 ? "✅ PASS" : "❌ FAIL"}] Open > ${WARNING_AGE_DAYS} days           : actual ${daysSinceCreation.toFixed(1)} days`);
-              console.log(`   [${warnCond2 ? "✅ PASS" : "❌ FAIL"}] Inactive > ${WARNING_INACTIVE_DAYS} days       : actual ${daysSinceUpdate.toFixed(1)} days`);
-              console.log(`   [${warnCond3 ? "✅ PASS" : "❌ FAIL"}] No warning label yet       : hasWarning = ${hasWarning}`);
+              console.log("\n Warning Stage Check:");
+              console.log(`  [${warnCond1 ? " PASS" : " FAIL"}] Open for more than ${WARNING_AGE_DAYS} days : actual ${daysSinceCreation.toFixed(1)} days`);
+              console.log(`  [${warnCond2 ? " PASS" : " FAIL"}] Inactive for more than ${WARNING_INACTIVE_DAYS} days : actual ${daysSinceUpdate.toFixed(1)} days`);
+              console.log(`  [${warnCond3 ? " PASS" : " FAIL"}] No warning label present : hasWarning = ${hasWarning}`);
 
               if (warnCond1 && warnCond2 && warnCond3) {
-                console.log("   ✅ ALL CONDITIONS MET → Posting warning comment and adding label");
+                console.log(" ALL CONDITIONS MET -> Adding warning label and comment");
 
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: "⚠️ **This PR has been inactive for 14 days.**\n\nIt will be **automatically closed in 2 days** unless:\n\n- ✅ Activity resumes (new commit, comment, or review)\n- ✅ You add one of the following labels to keep it open:\n  - `keep-open`\n  - `long-running`\n  - `blocked`\n  - `review-pending`\n  - `high-priority`\n\nIf this PR is still relevant, please leave a comment or push an update. Otherwise, it will be closed automatically to keep the repository tidy."
+                  body: `** Auto-close warning ** \n\n This PR has been inactive for more than ${WARNING_INACTIVE_DAYS} days and will be automatically closed in ${CLOSE_AGE_DAYS - WARNING_AGE_DAYS} days if no further activity is detected. \n\n If you would like to prevent this PR from being automatically closed, please add one of the following labels: \n\n - \`keep-open\` \n - \`long-running\` \n - \`blocked\` \n - \`review-pending\` \n - \`high-priority\` `
                 });
-                console.log("   💬 Warning comment posted");
+                console.log(" Added warning comment to PR\n");
 
                 await github.rest.issues.addLabels({
                   owner: context.repo.owner,
@@ -183,59 +178,61 @@ jobs:
                   issue_number: pr.number,
                   labels: [WARNING_LABEL]
                 });
-                console.log(`   🏷️  Added label: ${WARNING_LABEL}`);
-                console.log("   ⏭️  Warning posted — closure check deferred to next run\n");
+                console.log(` Added warning label to PR #${pr.number}\n`);
+                console.log("Warning posted - closure check deferred to next run\n");
                 continue;
               } else {
-                console.log("   ➖ CONDITIONS NOT MET → Warning stage skipped");
+                console.log("Conditions not met -> warning stage skipped");
               }
 
-              // ----------------------------------------------------------
-              // 🔴 CLOSURE STAGE
-              //    Triggers when: open > 16 days AND inactive > 10 days AND warning label exists
-              //    NOTE: Only closes PR — does NOT merge, does NOT delete branch
-              // ----------------------------------------------------------
+              //====================================================
+              // Closure STAGE
+              // Triggers when: open >16 days AND inactive >10 days AND warning exists
+              // NOTE: Only closes PR - does not merge, does not delete branch
+              //====================================================
+
               const closeCond1 = daysSinceCreation > CLOSE_AGE_DAYS;
               const closeCond2 = daysSinceUpdate   > CLOSE_INACTIVE_DAYS;
               const closeCond3 = hasWarning;
 
-              console.log("\n   🔴 Closure Stage Conditions:");
-              console.log(`   [${closeCond1 ? "✅ PASS" : "❌ FAIL"}] Open > ${CLOSE_AGE_DAYS} days           : actual ${daysSinceCreation.toFixed(1)} days`);
-              console.log(`   [${closeCond2 ? "✅ PASS" : "❌ FAIL"}] Inactive > ${CLOSE_INACTIVE_DAYS} days        : actual ${daysSinceUpdate.toFixed(1)} days`);
-              console.log(`   [${closeCond3 ? "✅ PASS" : "❌ FAIL"}] Warning label exists       : hasWarning = ${hasWarning}`);
+              console.log("\n Closure Stage Check:");
+              console.log(`  [${closeCond1 ? " PASS" : " FAIL"}] Open for more than ${CLOSE_AGE_DAYS} days : actual ${daysSinceCreation.toFixed(1)} days`);
+              console.log(`  [${closeCond2 ? " PASS" : " FAIL"}] Inactive for more than ${CLOSE_INACTIVE_DAYS} days : actual ${daysSinceUpdate.toFixed(1)} days`);
+              console.log(`  [${closeCond3 ? " PASS" : " FAIL"}] Has warning label present : hasWarning = ${hasWarning}`);
 
               if (closeCond1 && closeCond2 && closeCond3) {
-                console.log("   ✅ ALL CONDITIONS MET → Closing PR (no merge, no branch delete)");
+                console.log(" ALL CONDITIONS MET -> Closing PR (no merge, no branch deletion)");
 
-                // Post closure message BEFORE closing
+                // BEFORE closing
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: "🔴 **This PR has been automatically closed due to inactivity.**\n\nNo activity was detected for over 10 days after the warning was posted.\n\n**This PR can be reopened at any time** — your branch and all changes are preserved.\n\nTo prevent auto-closing in the future, add one of these labels before the warning period ends:\n- `keep-open`\n- `long-running`\n- `blocked`\n- `review-pending`\n- `high-priority`"
+                  body: `** This PR has been automatically closed due to inactivity ** \n\n No activity has been detected for more than ${CLOSE_INACTIVE_DAYS} days. \n\n This PR can be reopened if necessary - your branch and all changes are preserved.\n\nTo prevent auto-closing in the future, add one of the labels before warning period ends : \n\n - \`keep-open\` \n - \`long-running\` \n - \`blocked\` \n - \`review-pending\` \n - \`high-priority\` `
                 });
-                console.log("   💬 Closure message posted");
+                console.log(" Closure message posted");
 
-                // Close the PR only — no merge, no branch deletion
+                // Close the PR only - no merge, no branch deletion
                 await github.rest.pulls.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: pr.number,
                   state: "closed"
                 });
-                console.log(`   🔒 PR #${pr.number} CLOSED (branch preserved, not merged)`);
-
+                console.log(` Closed PR #${pr.number}\n`);
               } else {
-                console.log("   ➖ CONDITIONS NOT MET → PR stays open");
+                console.log("Conditions not met -> PR stays open");
               }
 
               console.log("");
             }
 
-            // ============================================================
-            // ✅ DONE
-            // ============================================================
-            console.log("========================================");
-            console.log("✅ PR Cleanup Workflow Completed");
-            console.log(`🕐 Finished at: ${new Date().toISOString()}`);
-            console.log("========================================");
+            //====================================================
+            // DONE
+            //====================================================
+
+            console.log("====================================");
+            console.log("PR Cleanup Workflow Completed");
+            console.log(`Total Open PRs processed: ${prs.length}`);
+            console.log(`Finished at : ${new Date().toISOString()}`);
+            console.log("====================================");
